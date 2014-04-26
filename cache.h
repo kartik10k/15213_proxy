@@ -25,11 +25,4 @@ void modify_cache(cache_list *cl, char *url, char *content,
 void free_cache_list(cache_list *cl);
 void print_list(cache_list *cl);
 
-static cache_block *new_cache(char *url, char *content, unsigned int block_size);
-static void insert_cache(cache_list *cl, cache_block *cb);
-static void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_cb);
-static cache_block *delete_cache(cache_block *cb);
-static void update_cache(cache_list *cl, cache_block *cb);
-
-
 #endif

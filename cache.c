@@ -1,6 +1,12 @@
 #include "csapp.h"
 #include "cache.h"
 
+static cache_block *new_cache(char *url, char *content, unsigned int block_size);
+static void insert_cache(cache_list *cl, cache_block *cb);
+static void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_cb);
+static cache_block *delete_cache(cache_block *cb);
+static void update_cache(cache_list *cl, cache_block *cb);
+
 void init_cache_list(cache_list *cl) {
 	cl->total_size = 0;
 	cl->head = new_cache(NULL, NULL, 0);
@@ -22,7 +28,7 @@ void free_cache_list(cache_list *cl) {
 	return;
 }
 
-cache_block *new_cache(char *url, char *content, 
+static cache_block *new_cache(char *url, char *content, 
 		unsigned int block_size) {
 	cache_block *cb;
 	cb = (cache_block *)Malloc(sizeof(cache_block));
@@ -36,7 +42,7 @@ cache_block *new_cache(char *url, char *content,
 	return cb;
 }
 
-void insert_cache(cache_list *cl, cache_block *cb) {
+static void insert_cache(cache_list *cl, cache_block *cb) {
 	cb->prev = cl->head;
     cb->next = cl->head->next;
     cl->head->next->prev = cb;
@@ -45,7 +51,7 @@ void insert_cache(cache_list *cl, cache_block *cb) {
     return;
 }
 
-cache_block *delete_cache(cache_block *cb) {
+static cache_block *delete_cache(cache_block *cb) {
 	cache_block *next_cb;
 	cb->next->prev = cb->prev;
 	cb->prev->next = cb->next;
@@ -55,7 +61,7 @@ cache_block *delete_cache(cache_block *cb) {
     return next_cb;
 }
 
-void update_cache(cache_list *cl, cache_block *cb) {
+static void update_cache(cache_list *cl, cache_block *cb) {
 	cb->next->prev = cb->prev;
 	cb->prev->next = cb->next;
 	cb->prev = cl->head;
@@ -66,7 +72,7 @@ void update_cache(cache_list *cl, cache_block *cb) {
 	return;
 }
 
-void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_cb) {
+static void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_cb) {
 	delete_cache(old_cb);
 	insert_cache(cl, new_cb);
 
