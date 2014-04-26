@@ -76,8 +76,8 @@ void doit(int fd) {
     rio_t client_rio;
     rio_t server_rio;
     cache_block* cache = NULL;
-    int total = 0;
-    bool fit_size = true;
+    unsigned int total = 0;
+    int fit_size = 1;
 
     printf("---------In doit--------\r\n");
     char* uri = (char*)Malloc(MAXLINE * sizeof(char));
@@ -145,12 +145,12 @@ void doit(int fd) {
             return;
         }
 
-        if ((total + n) < MAX_OBJECT_SIZE){
+        if ((total + nread) < MAX_OBJECT_SIZE){
             memcpy(content + total, buf, sizeof(char) * nread);
-            total += n;
+            total += nread;
         }else{
             printf("web content object is too lage!\n");
-            fit_size = false;
+            fit_size = 0;
         }
         
         iRio_writen(fd, buf, nread);
@@ -158,9 +158,9 @@ void doit(int fd) {
 
     iClose(server_fd);
 
-    if (fit_size){
+    if (fit_size == 1){
         printf("cache the web content object\n");
-        
+        modify_cache(cache_inst, uri, content, total);
     }
 
     printf("---------Out doit--------\r\n");
