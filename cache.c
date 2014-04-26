@@ -11,6 +11,10 @@ void init_cache_list(cache_list *cl) {
 	return;
 }
 
+void free_cache_list(cache_list *cl) {
+
+}
+
 cache_block *new_cache(char *url, char *content, unsigned int block_size) {
 	cache_block *cb;
 	cb = (cache_block *)Malloc(sizeof(cache_block));
@@ -33,7 +37,7 @@ void insert_cache(cache_list *cl, cache_block *cb) {
     return;
 }
 
-void delete_cache(cache_list *cl) {
+void delete_cache(cache_list *cl, cache_block *cb) {
 	if (cl->tail->prev == cl->head)
         return;
 
@@ -47,7 +51,11 @@ void delete_cache(cache_list *cl) {
     return;
 }
 
-void replace_cache(cache_list *cl, cache_block *cb) {
+void update_cache(cache_list *cl, cache_block *cb) {
+	
+}
+
+void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_cb) {
 	delete_cache(cl);
 	insert_cache(cl, cb);
 }
@@ -56,9 +64,13 @@ cache_block *find_cache(cache_list *cl, char *url, char *content, unsigned int b
 	cache_block *cb;
     
     for(cb = cl->head->next; cb != NULL; cb = cb->next) {
-    	if(!strcmp(cb->id, url))
-  			return cb;
+    	if(!strcmp(cb->id, url)) {
+    		return cb; 
+    	}
+  			
     }
+
+
 
     if(cl->total_size + block_size <= MAX_CACHE_SIZE) {
     	cb = new_cache(url, content, block_size);
@@ -75,6 +87,6 @@ cache_block *find_cache(cache_list *cl, char *url, char *content, unsigned int b
 void print_list(cache_list *cl) {
 	cache_block *cb;
     for(cb = cl->head->next; cb != NULL; cb = cb->next) {
-    	
+
     }
 }
