@@ -19,14 +19,17 @@ typedef struct {
 }cache_list;
 
 void init_cache_list(cache_list *cl);
-cache_block *find_cache(cache_list *cl, char *url, char *content, unsigned int block_size);
+cache_block *find_cache(cache_list *cl, char *url);
+void modify_cache(cache_list *cl, char *url, char *content, 
+	unsigned int block_size);
 void free_cache_list(cache_list *cl);
-
-cache_block* new_cache(char *url, char *content, unsigned int block_size);
-void insert_cache(cache_list *cl, cache_block *cb);
-void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_cb);
-void delete_cache(cache_list *cl, cache_block *cb);
-void update_cache(cache_list *cl, cache_block *cb);
 void print_list(cache_list *cl);
+
+static cache_block *new_cache(char *url, char *content, unsigned int block_size);
+static void insert_cache(cache_list *cl, cache_block *cb);
+static void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_cb);
+static cache_block *delete_cache(cache_block *cb);
+static void update_cache(cache_list *cl, cache_block *cb);
+
 
 #endif

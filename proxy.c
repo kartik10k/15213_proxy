@@ -295,19 +295,14 @@ int parse_uri(char *uri, char *host, int *port, char *uri_nohost) {
     *host = 0;
     *port = 80;
 
-    uri_ptr = strstr(uri, "http");        
+    uri_ptr = strstr(uri, "http://");        
 
     if (uri_ptr == NULL) {
         strcpy(uri_nohost, uri);
         printf("---------Out parse_uri--------\n");
         return 0;
     } else {
-        if (strstr(uri, "https") != NULL){    //可能还有点问题
-            uri_ptr += 8;
-        }
-        else{
-            uri_ptr += 7;
-        }
+        uri_ptr += 7;
 
         first_slash_ptr = strchr(uri_ptr,'/');
         *first_slash_ptr = 0;
