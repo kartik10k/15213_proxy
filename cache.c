@@ -6,6 +6,7 @@ static void insert_cache(cache_list *cl, cache_block *cb);
 static void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_cb);
 static cache_block *delete_cache(cache_block *cb);
 static void update_cache(cache_list *cl, cache_block *cb);
+pthread_mutex_t cache_lock;
 
 void init_cache_list(cache_list *cl) {
 	cl->total_size = 0;
@@ -33,10 +34,17 @@ static cache_block *new_cache(char *url, char *content,
 		unsigned int block_size) {
 	cache_block *cb;
 	cb = (cache_block *)Malloc(sizeof(cache_block));
-
+	if (url != NULL){
+		cb->id = (char *) Malloc(sizeof(char) * strlen(url));
+		strcpy(cb->id, url);
+	}
 	cb->block_size = block_size;
-	cb->id = url;
-	cb->content = content;
+	//cb->id = url;
+	if (content != NULL){
+		cb->content = (char *) Malloc(sizeof(char) * strlen(content));
+		strcpy(cb->content, content);
+	}
+	//cb->content = content;
 	cb->prev = NULL;
 	cb->next = NULL;
 
@@ -82,14 +90,16 @@ static void replace_cache(cache_list *cl, cache_block *old_cb, cache_block *new_
 
 cache_block *find_cache(cache_list *cl, char *url) {
 	cache_block *cb;
-    
+    pthread_mutex_lock(&cache_lock);
+
     for(cb = cl->head->next; cb != cl->tail; cb = cb->next) {
     	if(!strcmp(cb->id, url)) {
     		update_cache(cl, cb);
+    		pthread_mutex_unlock(&cache_lock);
     		return cb; 
     	} 			
     }
-
+    pthread_mutex_unlock(&cache_lock);
     return NULL;
 }
 
@@ -98,6 +108,7 @@ void modify_cache(cache_list *cl, char *url, char *content,
 	cache_block *new_cb;
 	new_cb = new_cache(url, content, block_size);
 
+	pthread_mutex_lock(&cache_lock);
     if(cl->total_size + block_size <= MAX_CACHE_SIZE) {
     	insert_cache(cl, new_cb);
     }
@@ -111,7 +122,7 @@ void modify_cache(cache_list *cl, char *url, char *content,
     		}
     	}
     }
-
+    pthread_mutex_unlock(&cache_lock);
     return;
 
 }
