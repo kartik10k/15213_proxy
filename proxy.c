@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
     Sem_init(&mutex, 0, 1);
     pthread_rwlock_init(&rwlock, NULL);
 
+    cache_inst = (cache_list *)Malloc(sizeof(cache_list));
     init_cache_list(cache_inst);
 
     /* Check command line args number. */
@@ -68,7 +69,7 @@ int main(int argc, char **argv) {
         Pthread_create(&tid, NULL, thread, connfdp);
         printf("Connection broken\n");
     }
-
+    
     return 0;
 }
 

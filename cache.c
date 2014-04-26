@@ -25,6 +25,7 @@ void free_cache_list(cache_list *cl) {
 
 	Free(cl->head);
 	Free(cl->tail);
+	Free(cl);
 	return;
 }
 
