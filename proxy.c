@@ -1,10 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "csapp.h"
+#include "cache.h"
 
 /* Recommended max cache and object sizes */
-#define MAX_CACHE_SIZE 1049000
-#define MAX_OBJECT_SIZE 102400
 
 /* You won't lose style points for including these long lines in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
@@ -32,6 +31,7 @@ void client_error(int fd, char *cause, char *errnum, char *shortmsg, char *longm
 int iOpen_clientfd_r(int fd, char *hostname, int port);
 ssize_t iRio_readnb(int fd, char *hostname, rio_t *rp, void *usrbuf, size_t n);
 int iRio_writen(int fd, void *usrbuf, size_t n);
+void iClose(int fd);
 
 int main(int argc, char **argv) {
     int listenfd, port, clientlen;
@@ -98,7 +98,7 @@ void doit(int fd) {
     int server_connect = 0;
     server_connect = iRio_writen(server_fd, request, strlen(request));
     if (server_connect < 0) {
-        Close(server_fd);
+        iClose(server_fd);
         return;
     }
 
@@ -119,7 +119,7 @@ void doit(int fd) {
         iRio_writen(fd, buf, nread);
     }
 
-    Close(server_fd);
+    iClose(server_fd);
     printf("---------Out doit--------\r\n");
     return;
 }
@@ -144,7 +144,10 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port) {
     *request = 0;
     *host = 0;
 
-    Rio_readlineb(rp, buf, MAXLINE);
+    if (rio_readlineb(rp, buf, MAXLINE) < 0){
+        printf("rio_readlineb error\n");
+        return 0;
+    }
 
     strcat(raw, buf);
 
@@ -165,7 +168,10 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port) {
         printf("cmp result: %d\n", strcmp(buf, "\r\n"));
         *key = '\0';
         *value = '\0';
-        Rio_readlineb(rp, buf, MAXLINE);
+        if (rio_readlineb(rp, buf, MAXLINE) < 0){
+            printf("rio_readlineb error\n");
+            return 0;
+        }
         printf("buffer: %s\n", buf);
         strcat(raw, buf);
 
@@ -245,17 +251,14 @@ int parse_uri(char *uri, char *host, int *port, char *uri_nohost) {
     *host = 0;
     *port = 80;
 
-  if (uri_ptr == NULL) {
+    uri_ptr = strstr(uri, "http://");        //  https
+
+    if (uri_ptr == NULL) {
         strcpy(uri_nohost, uri);
         printf("---------Out parse_uri--------\n");
         return 0;
     } else {
-        if (strstr(uri, "https") != NULL){    //可能还有点问题
-            uri_ptr += 8;
-        }
-        else{
-            uri_ptr += 7;
-        }
+        uri_ptr += 7;
 
         first_slash_ptr = strchr(uri_ptr,'/');
         *first_slash_ptr = 0;
@@ -326,7 +329,7 @@ void *thread(void* vargp) {
     Pthread_detach(Pthread_self());
     Free(vargp);
     doit(connfd);
-    Close(connfd);
+    iClose(connfd);
     return NULL;
 }
 
@@ -338,8 +341,7 @@ int iRio_writen(int fd, void *usrbuf, size_t n) {
             return -1;
         } 
         else
-            return -1;
-            // unix_error("Rio_writen error");
+            unix_error("Rio_writen error");
     }
 
     return 0;
@@ -383,4 +385,9 @@ void client_error(int fd, char *cause, char *errnum, char *shortmsg, char *longm
     sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
     Rio_writen(fd, buf, strlen(buf));
     Rio_writen(fd, body, strlen(body));
+}
+
+void iClose(int fd){
+    if (close(fd) < 0)
+        printf("fd close error\n");
 }
