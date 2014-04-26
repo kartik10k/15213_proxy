@@ -18,8 +18,8 @@ pthread_rwlock_t rwlock;
 static cache_list *cache_inst;
 
 void doit(int fd);
-int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port);
-int parse_reqline(char *new_request, char *reqline, char *host, int *port);
+int generate_request(rio_t *rp, char *i_request, char *i_host, char * i_uri, int *i_port);
+int parse_reqline(char *new_request, char *reqline, char *host, char *uri, int *port);
 int parse_uri(char *uri, char *host, int *port, char *uri_nohost);
 void get_key_value(char *header_line, char *key, char *value);
 void get_host_port(char *value, char *host, int *port);
@@ -42,6 +42,7 @@ int main(int argc, char **argv) {
 
     Sem_init(&mutex, 0, 1);
     pthread_rwlock_init(&rwlock, NULL);
+
     init_cache_list(cache_inst);
 
     /* Check command line args number. */
@@ -74,7 +75,12 @@ int main(int argc, char **argv) {
 void doit(int fd) {
     rio_t client_rio;
     rio_t server_rio;
+    cache_block* cache = NULL;
+    int total = 0;
+    bool fit_size = true;
+
     printf("---------In doit--------\r\n");
+    char* uri = (char*)Malloc(MAXLINE * sizeof(char));
     char *request = (char *)Malloc(MAXLINE * sizeof(char));
     char *host = (char *)Malloc(MAXLINE * sizeof(char));
     int port;
@@ -82,19 +88,35 @@ void doit(int fd) {
 
     Rio_readinitb(&client_rio, fd);
 
-    int is_get = generate_request(&client_rio, request, host, &port);   
+    int is_get = generate_request(&client_rio, request, host, uri, &port);   
     if(!is_get) {
         Free(request);
         Free(host);
+        Free(uri);
         return;
     }
-          
-    printf("request: %s, host: %s, port: %d\n", request, host, port);
 
-    server_fd = iOpen_clientfd_r(fd, host, port);
-    if (server_fd < 0) {
+          
+    printf("request: %s, host: %s, uri: %s. port: %d\n", request, host, uri, port);
+
+    //first: find in cache
+    cache = find_cache(cache_inst, uri);
+    if (cache != NULL) //cache hit
+    {
+        printf("request find in cache!\n");
+        iRio_writen(fd, cache->content, cache->block_size);
         Free(request);
         Free(host);
+        Free(uri);
+        return;
+    }   
+
+    //cache miss
+    server_fd = iOpen_clientfd_r(fd, host, port);
+    if (server_fd < 0) {   //open connection error
+        Free(request);
+        Free(host);
+        Free(uri);
         return;
     }
         
@@ -106,31 +128,50 @@ void doit(int fd) {
         iClose(server_fd);
         Free(request);
         Free(host);
+        Free(uri);
         return;
     }
 
     /*Forward response from the server to the client through connfd*/
     ssize_t nread;
-    char buf[MAX_OBJECT_SIZE];
+    char buf[MAXLINE];
+    char content[MAX_OBJECT_SIZE];
 
-    while ((nread = iRio_readnb(fd, host, &server_rio, buf, MAX_OBJECT_SIZE)) != 0) {
+    while ((nread = iRio_readnb(fd, host, &server_rio, buf, MAXLINE)) != 0) {
         if(nread < 0) {
             Free(request);
             Free(host);
+            Free(uri);
             return;
         }
+
+        if ((total + n) < MAX_OBJECT_SIZE){
+            memcpy(content + total, buf, sizeof(char) * nread);
+            total += n;
+        }else{
+            printf("web content object is too lage!\n");
+            fit_size = false;
+        }
+        
         iRio_writen(fd, buf, nread);
     }
 
     iClose(server_fd);
+
+    if (fit_size){
+        printf("cache the web content object\n");
+        
+    }
+
     printf("---------Out doit--------\r\n");
 
     Free(request);
     Free(host);
+    Free(uri);
     return;
 }
 
-int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port) {
+int generate_request(rio_t *rp, char *i_request, char *i_host, char* i_uri, int *i_port) {
     char buf[MAXLINE]; 
     char key[MAXLINE];
     char value[MAXLINE];
@@ -139,6 +180,7 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port) {
     int host_in_reqbody = 0; 
     char* request = i_request;             // check the weird pointer/array assignment here!!!!
     char* host = i_host;
+    char* uri = i_uri;
 
     printf("-----------In generate_request--------\n");
     *buf = 0;
@@ -155,7 +197,7 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port) {
 
     strcat(raw, buf);
 
-    int is_get = parse_reqline(request, buf, host, &port);
+    int is_get = parse_reqline(request, buf, host, uri, &port);
 
     if(!is_get)
         return 0;
@@ -228,8 +270,8 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port) {
     return 1;
 }
 
-int parse_reqline(char *new_request, char *reqline, char *host, int *port) {
-    char method[MAXLINE], uri[MAXLINE], version[MAXLINE];
+int parse_reqline(char *new_request, char *reqline, char *host, char* uri, int *port) {
+    char method[MAXLINE], version[MAXLINE];
     char uri_nohost[MAXLINE];
     char new_req[MAXLINE];
     
