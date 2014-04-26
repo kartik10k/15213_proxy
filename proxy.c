@@ -102,13 +102,14 @@ void doit(int fd) {
 
     //first: find in cache
     cache = find_cache(cache_inst, uri);
-    if (cache != NULL) //cache hit
+    if (cache != NULL ) //cache hit
     {
-        printf("request find in cache!\n");
+        printf("request find in cache! uri: %s\n", uri);
         iRio_writen(fd, cache->content, cache->block_size);
         Free(request);
         Free(host);
         Free(uri);
+        printf("out do it\n");
         return;
     }   
 
@@ -160,8 +161,12 @@ void doit(int fd) {
     iClose(server_fd);
 
     if (fit_size == 1){
-        printf("cache the web content object\n");
-        modify_cache(cache_inst, uri, content, total);
+        if (strstr(uri, "?") != NULL){
+            printf("do not cache this web content uri:%s\n", uri);
+        }else{
+            printf("cache the web content object uri: %s\n", uri);
+            modify_cache(cache_inst, uri, content, total);
+        }
     }
 
     printf("---------Out doit--------\r\n");
