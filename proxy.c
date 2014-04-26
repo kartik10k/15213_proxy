@@ -15,6 +15,7 @@ static const char *default_http_version = "HTTP/1.0\r\n";
 
 static sem_t mutex;
 pthread_rwlock_t rwlock;
+static cache_list *cache_inst;
 
 void doit(int fd);
 int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port);
@@ -27,7 +28,7 @@ void *thread(void* vargp);
 /* Customized response func */
 void client_error(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
-/* New wrappers */
+/* Customized r/w func and error handler wrapper */
 int iOpen_clientfd_r(int fd, char *hostname, int port);
 ssize_t iRio_readnb(int fd, char *hostname, rio_t *rp, void *usrbuf, size_t n);
 int iRio_writen(int fd, void *usrbuf, size_t n);
@@ -41,6 +42,7 @@ int main(int argc, char **argv) {
 
     Sem_init(&mutex, 0, 1);
     pthread_rwlock_init(&rwlock, NULL);
+    init_cache_list(cache_inst);
 
     /* Check command line args number. */
     if (argc != 2) {
@@ -73,8 +75,6 @@ void doit(int fd) {
     rio_t client_rio;
     rio_t server_rio;
     printf("---------In doit--------\r\n");
-    // char request[MAXLINE];
-    // char host[MAXLINE];
     char *request = (char *)Malloc(MAXLINE * sizeof(char));
     char *host = (char *)Malloc(MAXLINE * sizeof(char));
     int port;
@@ -82,23 +82,30 @@ void doit(int fd) {
 
     Rio_readinitb(&client_rio, fd);
 
-    int is_get = generate_request(&client_rio, request, host, &port);
-    
-    if(!is_get)
+    int is_get = generate_request(&client_rio, request, host, &port);   
+    if(!is_get) {
+        Free(request);
+        Free(host);
         return;
+    }
           
     printf("request: %s, host: %s, port: %d\n", request, host, port);
+
     server_fd = iOpen_clientfd_r(fd, host, port);
-
-    if (server_fd < 0)
+    if (server_fd < 0) {
+        Free(request);
+        Free(host);
         return;
-
+    }
+        
     Rio_readinitb(&server_rio, server_fd);
 
     int server_connect = 0;
     server_connect = iRio_writen(server_fd, request, strlen(request));
     if (server_connect < 0) {
         iClose(server_fd);
+        Free(request);
+        Free(host);
         return;
     }
 
@@ -106,21 +113,20 @@ void doit(int fd) {
     ssize_t nread;
     char buf[MAX_OBJECT_SIZE];
 
-    // while ((nread = rio_readnb(&server_rio, buf, MAX_OBJECT_SIZE)) != 0){
-    //     if (nread < 0){
-    //         printf("rio_readnb error\n");
-    //         return;
-    //     }
-    //     iRio_writen(fd, buf, nread);
-    // }
     while ((nread = iRio_readnb(fd, host, &server_rio, buf, MAX_OBJECT_SIZE)) != 0) {
-        if(nread < 0)
+        if(nread < 0) {
+            Free(request);
+            Free(host);
             return;
+        }
         iRio_writen(fd, buf, nread);
     }
 
     iClose(server_fd);
     printf("---------Out doit--------\r\n");
+
+    Free(request);
+    Free(host);
     return;
 }
 
@@ -129,8 +135,6 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port) {
     char key[MAXLINE];
     char value[MAXLINE];
     char raw[MAXLINE]; 
-    // char host[MAXLINE];
-    // char request[MAXLINE];
     int port = 80;
     int host_in_reqbody = 0; 
     char* request = i_request;             // check the weird pointer/array assignment here!!!!
@@ -214,8 +218,6 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, int *i_port) {
         strcat(request, host_hdr);
     }
 
-    // i_request = request;
-    // i_host = host;
     *i_port = port;
 
     strcat(request, "\r\n");
@@ -251,7 +253,7 @@ int parse_uri(char *uri, char *host, int *port, char *uri_nohost) {
     *host = 0;
     *port = 80;
 
-    uri_ptr = strstr(uri, "http://");        //  https
+    uri_ptr = strstr(uri, "http://");        
 
     if (uri_ptr == NULL) {
         strcpy(uri_nohost, uri);
@@ -367,6 +369,11 @@ ssize_t iRio_readnb(int fd, char *hostname, rio_t *rp, void *usrbuf, size_t n) {
     return rc;
 }
 
+void iClose(int fd){
+    if (close(fd) < 0)
+        printf("fd close error\n");
+}
+
 void client_error(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
     char buf[MAXLINE], body[MAXLINE];
 
@@ -385,9 +392,4 @@ void client_error(int fd, char *cause, char *errnum, char *shortmsg, char *longm
     sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
     Rio_writen(fd, buf, strlen(buf));
     Rio_writen(fd, body, strlen(body));
-}
-
-void iClose(int fd){
-    if (close(fd) < 0)
-        printf("fd close error\n");
 }
