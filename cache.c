@@ -66,6 +66,8 @@ static cache_block *delete_cache(cache_block *cb) {
 	cb->prev->next = cb->next;
 	next_cb = cb->next;
 
+	Free(cb->id);
+    Free(cb->content);
     Free(cb);
     return next_cb;
 }
@@ -132,6 +134,5 @@ void print_list(cache_list *cl) {
     for(cb = cl->head->next; cb != NULL; cb = cb->next) {
     	;
     }
-
     return;
 }
