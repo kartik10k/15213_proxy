@@ -34,6 +34,7 @@ ssize_t iRio_readnb(int fd, char *hostname, rio_t *rp, void *usrbuf, size_t n);
 int iRio_writen(int fd, void *usrbuf, size_t n);
 void iClose(int fd);
 
+
 int main(int argc, char **argv) {
     int listenfd, port, clientlen;
     int *connfdp;
@@ -76,9 +77,11 @@ int main(int argc, char **argv) {
 void doit(int fd) {
     rio_t client_rio;
     rio_t server_rio;
-    cache_block* cache = NULL;
+  //  cache_block* cache = NULL;
     unsigned int total = 0;
     int fit_size = 1;
+    char* content_copy = NULL;
+    int content_size = 0;
 
     printf("---------In doit--------\r\n");
     char* uri = (char*)Malloc(MAXLINE * sizeof(char));
@@ -100,18 +103,22 @@ void doit(int fd) {
           
     printf("request: %s, host: %s, uri: %s. port: %d\n", request, host, uri, port);
 
-    //first: find in cache
-    cache = find_cache(cache_inst, uri);
-    if (cache != NULL ) //cache hit
-    {
-        printf("request find in cache! uri: %s\n", uri);
-        iRio_writen(fd, cache->content, cache->block_size);
+    //first: read in cache
+    content_copy = read_cache(cache_inst, uri, &content_size);
+   if (content_size > 0){ //cache hit
+        if (content_copy == NULL){
+            printf("content in cache error\n");
+            return;
+        }
+
+        iRio_writen(fd, content_copy, content_size);
+        Free(content_copy);
         Free(request);
         Free(host);
         Free(uri);
         printf("out do it\n");
         return;
-    }   
+    }  
 
     //cache miss
     server_fd = iOpen_clientfd_r(fd, host, port);
@@ -167,8 +174,8 @@ void doit(int fd) {
             printf("cache the web content object uri: %s\n", uri);
             modify_cache(cache_inst, uri, content, total);
         }
-    }
-
+    } 
+ 
     printf("---------Out doit--------\r\n");
 
     Free(request);
