@@ -105,7 +105,7 @@ void doit(int fd) {
 
     //first: read in cache
     content_copy = read_cache(cache_inst, uri, &content_size);
-   if (content_size > 0){ //cache hit
+    if (content_size > 0){ //cache hit
         if (content_copy == NULL){
             printf("content in cache error\n");
             return;
@@ -168,12 +168,12 @@ void doit(int fd) {
     iClose(server_fd);
 
     if (fit_size == 1){
-        if (strstr(uri, "?") != NULL){
-            printf("do not cache this web content uri:%s\n", uri);
-        }else{
+        // if (strstr(uri, "?") != NULL){
+        //     printf("do not cache this web content uri:%s\n", uri);
+        // }else{
             printf("cache the web content object uri: %s\n", uri);
             modify_cache(cache_inst, uri, content, total);
-        }
+        // }
     } 
  
     printf("---------Out doit--------\r\n");
@@ -398,7 +398,8 @@ int iRio_writen(int fd, void *usrbuf, size_t n) {
             return -1;
         } 
         else
-            unix_error("Rio_writen error");
+            // unix_error("Rio_writen error");
+            return -1;
     }
 
     return 0;

@@ -20,6 +20,7 @@ typedef struct {
 
 void init_cache_list(cache_list *cl);
 cache_block *find_cache(cache_list *cl, char *url);
+char* read_cache(cache_list *cl, char *url, int* size);
 void modify_cache(cache_list *cl, char *url, char *content, 
 	unsigned int block_size);
 void free_cache_list(cache_list *cl);
