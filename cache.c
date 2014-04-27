@@ -67,10 +67,12 @@ static cache_block *delete_cache(cache_block *cb) {
 	cb->next->prev = cb->prev;
 	cb->prev->next = cb->next;
 	next_cb = cb->next;
+
 	cb->prev = NULL;
 	cb->next = NULL;
 	Free(cb->id);
 	Free(cb->content);
+
     Free(cb);
     return next_cb;
 }
@@ -163,6 +165,5 @@ void print_list(cache_list *cl) {
     for(cb = cl->head->next; cb != NULL; cb = cb->next) {
     	;
     }
-
     return;
 }
