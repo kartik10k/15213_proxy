@@ -1,9 +1,13 @@
+/*
+ * 15-213 Proxy Lab - proxy.c
+ * Name: Cheng Zhang, Andrew ID: chengzh1
+ * Name: Zhe Qian, Andrew ID: zheq
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "csapp.h"
 #include "cache.h"
-
-/* Recommended max cache and object sizes */
 
 /* You won't lose style points for including these long lines in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
@@ -44,7 +48,7 @@ int main(int argc, char **argv) {
     pthread_t tid;
 
     /* Cache list initiation */
-    cache_inst = (cache_list *)Malloc(sizeof(cache_list));
+    cache_inst = (cache_list *)malloc(sizeof(cache_list));
     init_cache_list(cache_inst);
 
     /* Check command line args number */
@@ -58,11 +62,12 @@ int main(int argc, char **argv) {
     /* Ignore SIGPIPE signal */
     Signal(SIGPIPE, SIG_IGN);
 
+    /* Open listening port */
     listenfd = Open_listenfd(port);
 
     while (1) {
         clientlen = sizeof(clientaddr);
-        connfdp = (int *)Malloc(sizeof(int));
+        connfdp = (int *)malloc(sizeof(int));
         *connfdp = Accept(listenfd, (SA *)&clientaddr, 
                     (socklen_t *)&clientlen);
         Pthread_create(&tid, NULL, thread, connfdp);
@@ -71,6 +76,9 @@ int main(int argc, char **argv) {
     return 0;
 }
 
+/* 
+ * Process the request 
+ */
 void doit(int fd) {
     rio_t client_rio;
     rio_t server_rio;
@@ -79,73 +87,79 @@ void doit(int fd) {
     char* content_copy = NULL;
     int content_size = 0;
 
-    char *uri = (char *)Malloc(MAXLINE * sizeof(char));
-    char *request = (char *)Malloc(MAXLINE * sizeof(char));
-    char *host = (char *)Malloc(MAXLINE * sizeof(char));
+    char *uri = (char *)malloc(MAXLINE * sizeof(char));
+    char *request = (char *)malloc(MAXLINE * sizeof(char));
+    char *host = (char *)malloc(MAXLINE * sizeof(char));
     int port;
     int server_fd;
 
     Rio_readinitb(&client_rio, fd);
 
+    /* Check if the request is a GET request */
     int is_get = generate_request(&client_rio, request, host, uri, &port);   
     if(!is_get) {
-        Free(request);
-        Free(host);
-        Free(uri);
+        free(request);
+        free(host);
+        free(uri);
         return;
     }
 
-    //first: read in cache
+    /* First: read in cache */
     content_copy = read_cache(cache_inst, request, &content_size);
-   if (content_size > 0){ //cache hit
+    /* Cache hit: send cached response back to client */
+    if (content_size > 0){ 
         if (content_copy == NULL){
             printf("content in cache error\n");
             return;
         }
 
         iRio_writen(fd, content_copy, content_size);
-        Free(content_copy);
-        Free(request);
-        Free(host);
-        Free(uri);
+        free(content_copy);
+        free(request);
+        free(host);
+        free(uri);
         return;
     }  
 
-    //cache miss
+    /* Cache miss: connect to server to get response */
     server_fd = iOpen_clientfd_r(fd, host, port);
-    if (server_fd < 0) {   //open connection error
-        Free(request);
-        Free(host);
-        Free(uri);
+    /* Open connection error */
+    if (server_fd < 0) {   
+        free(request);
+        free(host);
+        free(uri);
         return;
     }
         
     Rio_readinitb(&server_rio, server_fd);
 
     int server_connect = 0;
+    /* Send request to server */
     server_connect = iRio_writen(server_fd, request, strlen(request));
     if (server_connect < 0) {
         iClose(server_fd);
-        Free(request);
-        Free(host);
-        Free(uri);
+        free(request);
+        free(host);
+        free(uri);
         return;
     }
 
-    /*Forward response from the server to the client through connfd*/
+    /* Forward response from the server to the client through connfd */
     ssize_t nread;
     char buf[MAX_OBJECT_SIZE];
     char content[MAX_OBJECT_SIZE];
 
+    /* Keep reading until the end of response */
     while ((nread = iRio_readnb(fd, host, &server_rio, 
                 buf, MAX_OBJECT_SIZE)) != 0) {
         if(nread < 0) {
-            Free(request);
-            Free(host);
-            Free(uri);
+            free(request);
+            free(host);
+            free(uri);
             return;
         }
 
+        /* store the response and check if it extends the max object size*/
         if ((total + nread) < MAX_OBJECT_SIZE){
             memcpy(content + total, buf, sizeof(char) * nread);
             total += nread;
@@ -153,11 +167,14 @@ void doit(int fd) {
             printf("web content object is too lage!\n");
             fit_size = 0;
         }
+        /* Forward response back to client */
         iRio_writen(fd, buf, nread);
     }
 
+    /* Close proxy-server connection */
     iClose(server_fd);
 
+    /* Cache the response object if it fit the max object size */
     if (fit_size == 1){
         if (strstr(content, "no-cache") != NULL){
             printf("cache control is no cache, do not cache\n");
@@ -167,12 +184,15 @@ void doit(int fd) {
         }
     } 
  
-    Free(request);
-    Free(host);
-    Free(uri);
+    free(request);
+    free(host);
+    free(uri);
     return;
 }
 
+/* 
+ * Generate a new request for server according to the request from clinet
+ */
 int generate_request(rio_t *rp, char *i_request, char *i_host, 
             char *i_uri, int *i_port) {
     char buf[MAXLINE]; 
@@ -197,18 +217,23 @@ int generate_request(rio_t *rp, char *i_request, char *i_host,
         return 0;
     }
 
+    /* Store the raw request, for debugging */
     strcat(raw, buf);
 
+    /* Parse the request line to get the host, uri and port */
     int is_get = parse_reqline(request, buf, host, uri, &port);
 
     if(!is_get)
         return 0;
+
+    /* Concat the specified request header */
     strcat(request, user_agent_hdr);
     strcat(request, accept_hdr);
     strcat(request, accept_encoding_hdr);
     strcat(request, connection_hdr);
     strcat(request, proxy_connection_hdr);
 
+    /* Go through the request line by line */
     while (strcmp(buf, "\r\n")) {
         *key = '\0';
         *value = '\0';
@@ -229,6 +254,7 @@ int generate_request(rio_t *rp, char *i_request, char *i_host,
                 get_host_port(value, host, &port);
                 host_in_reqbody = 1;
             }
+            /* If the key-value pair is not specified, add it */
             if (strcmp(key, "User-Agent") && 
                     strcmp(key, "Accept") && 
                     strcmp(key, "Accept-Encoding") &&
@@ -258,50 +284,70 @@ int generate_request(rio_t *rp, char *i_request, char *i_host,
 
     *i_port = port;
 
+    /* End the request with "\r\n" */
     strcat(request, "\r\n");
 
     return 1;
 }
 
+/* 
+ * Process the request line 
+ */
 int parse_reqline(char *new_request, char *reqline, char *host, 
             char *uri, int *port) {
     char method[MAXLINE], version[MAXLINE];
     char uri_nohost[MAXLINE];
     char new_req[MAXLINE];
     
+    /* Get method, uri, and version from the request line */
     sscanf(reqline, "%s %s %s", method, uri, version);
+
+    /* Check if the method is GET */
     if(strcasecmp(method, "GET"))
         return 0;
+
+    /* Parse the uri accordingly */
     parse_uri(uri, host, port, uri_nohost);
 
+    /* Generate a new request line as required */
     sprintf(new_req, "%s %s %s", method, uri_nohost, default_http_version);
     strcat(new_request, new_req);
     return 1;
 }
 
+/*
+ * Process the uri string
+ */
 int parse_uri(char *uri, char *host, int *port, char *uri_nohost) {
     char *uri_ptr, *first_slash_ptr;
     char host_str[MAXLINE], port_str[MAXLINE];
     *host = 0;
     *port = 80;
 
+    /* Find the start of "http://" */
     uri_ptr = strstr(uri, "http://");        
 
+    /* If not start with "http://", just return with the uri */
     if (uri_ptr == NULL) {
         strcpy(uri_nohost, uri);
         return 0;
     } else {
+        /* Get to the start of the Host string */
         uri_ptr += 7;
 
+        /* Find the end of the Host string */
         first_slash_ptr = strchr(uri_ptr,'/');
         *first_slash_ptr = 0;
 
+        /* Get the Host string */
         strcpy(host_str, uri_ptr);
 
         *first_slash_ptr = '/';
         strcpy(uri_nohost, first_slash_ptr);
 
         char *port_ptr;
+
+        /* Get to the start of the Port string */
         port_ptr = strstr(host_str, ":");
         if (port_ptr != NULL) {
                 *port_ptr = 0;
@@ -309,11 +355,15 @@ int parse_uri(char *uri, char *host, int *port, char *uri_nohost) {
                 *port = atoi(port_str);
         }
 
+        /* Copy the Host string back to the given pointer */
         strcpy(host, host_str);
         return 1;
     }
 }
 
+/*
+ * Get key value pair from request header line
+ */
 void get_key_value(char *header_line, char *key, char *value) {
     char *key_tail, *value_tail;
 
@@ -334,10 +384,14 @@ void get_key_value(char *header_line, char *key, char *value) {
     return;
 }
 
+/* 
+ * Get Host and Port from the "Host:" request header line
+ */
 void get_host_port(char *value, char *host, int *port) {
     char *host_tail;
     *port = 80;
 
+    /* Split the given header line by ":" */
     host_tail = strstr(value, ":");
     if (host_tail != NULL) {
         *host_tail = 0;
@@ -348,16 +402,27 @@ void get_host_port(char *value, char *host, int *port) {
     return;
 }
 
+/* 
+ * New thread to process the request 
+ */
 void *thread(void* vargp) {
     int connfd = *((int *)vargp);
-    Free(vargp);
+    free(vargp);
+    /* 
+     * Detach the new thread so that 
+     * it can be handled automatically
+     * after it finishes
+     */
     Pthread_detach(Pthread_self());
     doit(connfd);
+    /* Close the connection*/
     iClose(connfd);
     return NULL;
 }
 
-/* Customized r/w func and error handler wrapper */
+/* 
+ * Customized r/w func and error handler wrapper 
+ */
 int iRio_writen(int fd, void *usrbuf, size_t n) {
     if (rio_writen(fd, usrbuf, n) != n) {
         if (errno == EPIPE || errno == ECONNRESET) {
@@ -397,6 +462,9 @@ void iClose(int fd){
         printf("fd close error\n");
 }
 
+/* 
+ * Build a simple website for cannot connect to server errors 
+ */
 void client_error(int fd, char *cause, char *errnum, 
             char *shortmsg, char *longmsg) {
     char buf[MAXLINE], body[MAXLINE];
