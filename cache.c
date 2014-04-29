@@ -1,50 +1,104 @@
+/*
+ * cache.c -- Cache module for the 15-213 proxy lab
+ * 
+ * Team Member1: Cheng Zhang, Andrew ID: chengzh1
+ * Team Member2: Zhe Qian, Andrew ID: zheq
+ *
+ * Overview of cache structure:
+ *	The completed cache structure and some methods that 
+ *	should be used in proxy.c are defined in cache.h, the 
+ *  rest methods for cache are defined here. Bascially,
+ *  we use a linked list to cache web content, each cache 
+ *  block includes the request header as its id, the block szie,
+ *  the cached content and poniter to previous and next cache block.
+ *  To implemented the LRU policy, we add new cache block at the head
+ *  of the cache list, and remove old block from the tail of the list.
+ *  When there is a cache hit, we also move this cache block to the
+ *  head of the list. For thread-safe, we lock the cache list each
+ *  time we manipulate the cache block.
+ */
+
 #include "csapp.h"
 #include "cache.h"
 
-static cache_block *new_cache(char *url, char *content, unsigned int block_size);
+/*
+ * Declaration of the methods and variables that only used
+ * in cache.c
+ */
+static cache_block *new_cache(char *id, char *content, 
+							 unsigned int block_size);
 static void insert_cache(cache_list *cl, cache_block *cb);
 static void replace_cache(cache_list *cl, cache_block *new_cb);
 static cache_block *delete_cache(cache_list *cl, cache_block *cb);
 static void update_cache(cache_list *cl, cache_block *cb);
-// static pthread_mutex_t cache_lock;
 static sem_t sem;
 
-void init_cache_list(cache_list *cl) {
+
+/*
+ * Initialize caceh list
+ */
+void init_cache_list(cache_list *cl)
+{
 	cl->total_size = 0;
+
+	/* initialize the two cache block as head and tail */
 	cl->head = new_cache(NULL, NULL, 0);
 	cl->tail = new_cache(NULL, NULL, 0);
+
 	cl->head->next = cl->tail;
 	cl->tail->prev = cl->head;
+
+	/* initialize lock */
 	Sem_init(&sem, 0, 1); 
 
 	return;
 }
 
-void free_cache_list(cache_list *cl) {
+/*
+ * Free cache list
+ */
+void free_cache_list(cache_list *cl)
+{
+	/* delete all cache block */
 	cache_block *cb;
-	for(cb = cl->tail->prev; cb != cl->head;) {
+	for(cb = cl->tail->prev; cb != cl->head;){
 		cb = delete_cache(cl, cb);
 	}
 
-	Free(cl->head);
-	Free(cl->tail);
-	Free(cl);
+	/* free heap */
+	free(cl->head);
+	free(cl->tail);
+	free(cl);
 	return;
 }
 
-static cache_block *new_cache(char *url, char *content, 
-		unsigned int block_size) {
+/*
+ * Create a new cache block
+ */
+static cache_block *new_cache(char *id, char *content, 
+							  unsigned int block_size)
+{
 	cache_block *cb;
-	cb = (cache_block *)Malloc(sizeof(cache_block));
-	if (url != NULL){
-		cb->id = (char *) Malloc(sizeof(char) * (strlen(url) + 1));
-		strcpy(cb->id, url);
+	cb = (cache_block *)malloc(sizeof(cache_block));
+
+	/* 
+	 * copy cache id, if id == NULL, 
+	 * it is header and tail
+	 */
+	if (id != NULL){
+		cb->id = (char *) malloc(sizeof(char) * (strlen(id) + 1));
+		strcpy(cb->id, id);
 	}
+
 	cb->block_size = block_size;
 
+	/* 
+	 * copy cache content, if content == NULL, 
+	 * it is header and tail
+	 */
 	if (content != NULL){
-		cb->content = (char *) Malloc(sizeof(char) * (block_size + 1));
-		strcpy(cb->content, content);
+		cb->content = (char *) malloc(sizeof(char) * block_size);
+		memcpy(cb->content, content, sizeof(char) * block_size);
 	}
 
 	cb->prev = NULL;
@@ -53,16 +107,28 @@ static cache_block *new_cache(char *url, char *content,
 	return cb;
 }
 
-static void insert_cache(cache_list *cl, cache_block *cb) {
+/*
+ * Insert a cache block into cache list
+ */
+static void insert_cache(cache_list *cl, cache_block *cb)
+{
+	/* manipulate pointer */
 	cb->prev = cl->head;
     cb->next = cl->head->next;
     cl->head->next->prev = cb;
     cl->head->next = cb;
+
+    /* change total size */
     cl->total_size += cb->block_size;
     return;
 }
 
-static cache_block *delete_cache(cache_list *cl, cache_block *cb) {
+/*
+ * Delete cache block
+ */
+static cache_block *delete_cache(cache_list *cl, cache_block *cb)
+{
+	/* remove cache block from list */
 	cache_block *prev_cb;
 	cb->next->prev = cb->prev;
 	cb->prev->next = cb->next;
@@ -71,14 +137,22 @@ static cache_block *delete_cache(cache_list *cl, cache_block *cb) {
 
 	cb->prev = NULL;
 	cb->next = NULL;
-	Free(cb->id);
-	Free(cb->content);
 
-    Free(cb);
+	/* Free heap */
+	free(cb->id);
+	free(cb->content);
+    free(cb);
+
     return prev_cb;
 }
 
-static void update_cache(cache_list *cl, cache_block *cb) {
+/*
+ * Update cache list, put a new cache block
+ * to the head of the cache list.
+ */
+static void update_cache(cache_list *cl, cache_block *cb)
+{
+	/* put cache block to the head */
 	cb->next->prev = cb->prev;
 	cb->prev->next = cb->next;
 	cb->prev = cl->head;
@@ -89,24 +163,41 @@ static void update_cache(cache_list *cl, cache_block *cb) {
 	return;
 }
 
+/*
+ * When eviction, delete cache block from tail, 
+ * make room from new cache block, then insert
+ * the new cache block into head of the list.
+ */
 static void replace_cache(cache_list *cl, cache_block *new_cb) {
 	cache_block *cb;
-	for(cb = cl->tail->prev; cb != cl->head;) {
+	
+	/* delete from tail, make room for new cache block */
+	for(cb = cl->tail->prev; cb != cl->head;){
 		cb = delete_cache(cl, cb);
-		if(cl->total_size + new_cb->block_size <= MAX_CACHE_SIZE) {
+		if(cl->total_size + new_cb->block_size <= MAX_CACHE_SIZE){
 			break;
 		}
 	}
+
+	/* inster new cache block */
 	insert_cache(cl, new_cb);
 
 	return;
 }
 
-cache_block *find_cache(cache_list *cl, char *url) {
+/*
+ * Find a cache block in cache list by id
+ */
+cache_block *find_cache(cache_list *cl, char *id)
+{
 	cache_block *cb;
 
-    for(cb = cl->head->next; cb != cl->tail; cb = cb->next) {
-    	if(!strcmp(cb->id, url)) {
+	/*
+	 * serach the cache list, if there is a hit, move
+	 * the cache block to the head of cache list
+	 */
+    for(cb = cl->head->next; cb != cl->tail; cb = cb->next){
+    	if(!strcmp(cb->id, id)) {
     		update_cache(cl, cb);
     		return cb; 
     	} 			
@@ -114,57 +205,66 @@ cache_block *find_cache(cache_list *cl, char *url) {
     return NULL;
 }
 
-char* read_cache(cache_list *cl, char *url, int* size){
-	printf("read cache\n");
+/*
+ * Check cache list, if there exist the request content,
+ * read from it.
+ */
+char* read_cache(cache_list *cl, char *id, int* size)
+{
 	cache_block *cache = NULL;
-	//pthread_mutex_lock(&cache_lock);
+
+	/* 
+	 * As we would manipulate the cache list when there
+	 * is cache hit, we first lock it for thread safety
+	 */
 	P(&sem);
 	char* content_copy;
 
-	cache = find_cache(cl, url);
-	if (cache != NULL){
-		printf("request find in cache! uri: %s\n", url);
-		*size = cache->block_size;
-		content_copy = (char*) Malloc(sizeof(char) * cache->block_size);
+	cache = find_cache(cl, id);
 
-		memcpy(content_copy, cache->content, sizeof(char) * cache->block_size);
-		printf("%s\n", cache->content);
-//		pthread_mutex_unlock(&cache_lock);
+	/* if cache hit, copy the content */
+	if (cache != NULL){
+		*size = cache->block_size;
+		content_copy = (char*) malloc(sizeof(char) * cache->block_size);
+
+		memcpy(content_copy, cache->content, 
+			 sizeof(char) * cache->block_size);
 		V(&sem);
         return content_copy;
+
 	}else{
-		printf("not find in cache\n");
-	//	pthread_mutex_unlock(&cache_lock);
 		V(&sem);
 		return NULL;
 	}
 }
 
-void modify_cache(cache_list *cl, char *url, char *content, 
-		unsigned int block_size) {
+/*
+ * Write a new cache block to cache list
+ */
+void modify_cache(cache_list *cl, char *id, char *content, 
+		unsigned int block_size)
+{
 	cache_block *new_cb = NULL;
-//	pthread_mutex_lock(&cache_lock);
+	
+	/* 
+	 * Write operation should lock the cache list
+	 * for thread safety 
+	 */
 	P(&sem);
-	new_cb = new_cache(url, content, block_size);
+	new_cb = new_cache(id, content, block_size);
 
-    if(cl->total_size + block_size <= MAX_CACHE_SIZE) {
-    	printf("insert in cache\n");
+    /* 
+     * When there is enough room, insert the cache,
+	 * else replace old cache block.
+     */
+    if(cl->total_size + block_size <= MAX_CACHE_SIZE){
     	insert_cache(cl, new_cb);
     }
-    else {
+    else{
     	replace_cache(cl, new_cb);
-    	printf("cannot find proper cache block\n");
     }
- //   pthread_mutex_unlock(&cache_lock);
+
     V(&sem);
     return;
 
-}
-
-void print_list(cache_list *cl) {
-	cache_block *cb;
-    for(cb = cl->head->next; cb != NULL; cb = cb->next) {
-    	;
-    }
-    return;
 }
