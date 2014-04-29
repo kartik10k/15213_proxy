@@ -60,15 +60,11 @@ int main(int argc, char **argv) {
 
     listenfd = Open_listenfd(port);
 
-    printf("listen port open, with fd: %d\n", listenfd);
     while (1) {
-        printf("------In listening loop--------\n");
         clientlen = sizeof(clientaddr);
         connfdp = (int *)Malloc(sizeof(int));
         *connfdp = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
-        printf("Connection made\n");
         Pthread_create(&tid, NULL, thread, connfdp);
-        printf("Connection broken\n");
     }
     
     return 0;
@@ -77,13 +73,11 @@ int main(int argc, char **argv) {
 void doit(int fd) {
     rio_t client_rio;
     rio_t server_rio;
-  //  cache_block* cache = NULL;
     unsigned int total = 0;
     int fit_size = 1;
     char* content_copy = NULL;
     int content_size = 0;
 
-    printf("---------In doit--------\r\n");
     char* uri = (char*)Malloc(MAXLINE * sizeof(char));
     char *request = (char *)Malloc(MAXLINE * sizeof(char));
     char *host = (char *)Malloc(MAXLINE * sizeof(char));
@@ -100,9 +94,6 @@ void doit(int fd) {
         return;
     }
 
-          
-    printf("request: %s, host: %s, uri: %s. port: %d\n", request, host, uri, port);
-
     //first: read in cache
     content_copy = read_cache(cache_inst, request, &content_size);
    if (content_size > 0){ //cache hit
@@ -116,7 +107,6 @@ void doit(int fd) {
         Free(request);
         Free(host);
         Free(uri);
-        printf("out do it\n");
         return;
     }  
 
@@ -161,27 +151,20 @@ void doit(int fd) {
             printf("web content object is too lage!\n");
             fit_size = 0;
         }
-        printf("buf content: %s\n", buf);
         iRio_writen(fd, buf, nread);
     }
 
     iClose(server_fd);
 
     if (fit_size == 1){
-      //  if (strstr(uri, "?") != NULL){
-      //      printf("do not cache this web content uri:%s\n", uri);
-   //     }else 
         if (strstr(content, "no-cache") != NULL){
             printf("cache control is no cache, do not cache\n");
         }else{
             printf("cache the web content object uri: %s\n", uri);
-            printf("content: %s\n", content);
             modify_cache(cache_inst, request, content, total);
         }
     } 
  
-    printf("---------Out doit--------\r\n");
-
     Free(request);
     Free(host);
     Free(uri);
@@ -199,7 +182,6 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, char* i_uri, int 
     char* host = i_host;
     char* uri = i_uri;
 
-    printf("-----------In generate_request--------\n");
     *buf = 0;
     *key = 0;
     *value = 0;
@@ -224,19 +206,13 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, char* i_uri, int 
     strcat(request, connection_hdr);
     strcat(request, proxy_connection_hdr);
 
-    printf("request with required header: %s\n", request);
-    printf("After parse_reqline, host: %s, port: %d\n", host, port);    
-    
-    while (strcmp(buf, "\r\n")) {                     // !!!!!!!! \r\n VS \n !!!!!!!!!!!
-        printf("cmp result: %d\n", strcmp(buf, "\r\n"));
-        printf("cmp is '\n?' %d \n", strcmp(buf,"\n"));
+    while (strcmp(buf, "\r\n")) {
         *key = '\0';
         *value = '\0';
         if (rio_readlineb(rp, buf, MAXLINE) < 0){
             printf("rio_readlineb error\n");
             return 0;
         }
-        printf("buffer: %s\n", buf);
         strcat(raw, buf);
 
         if (!strcmp(buf, "\r\n"))
@@ -244,7 +220,6 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, char* i_uri, int 
 
         /* Extract one key-value pair from one header line */
         get_key_value(buf, key, value);
-        printf("key: %s, value: %s\n", key, value);
         if (*key != '\0' && *value!='\0') {
             /* If the request body has Host header itself, use it */
             if (!strcmp(key, "Host")) {
@@ -281,9 +256,6 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, char* i_uri, int 
     *i_port = port;
 
     strcat(request, "\r\n");
-    printf("request finished: %s\n", request);
-    printf("raw request: %s\n", raw);
-    printf("-----------Out generate_request--------\n");
 
     return 1;
 }
@@ -293,7 +265,6 @@ int parse_reqline(char *new_request, char *reqline, char *host, char* uri, int *
     char uri_nohost[MAXLINE];
     char new_req[MAXLINE];
     
-    printf("---------In parse_reqline--------\n");
     sscanf(reqline, "%s %s %s", method, uri, version);
     if(strcasecmp(method, "GET"))
         return 0;
@@ -301,15 +272,12 @@ int parse_reqline(char *new_request, char *reqline, char *host, char* uri, int *
 
     sprintf(new_req, "%s %s %s", method, uri_nohost, default_http_version);   // !!!!! if not GET
     strcat(new_request, new_req);
-    printf("reqline: %s, host: %s, port: %d, new_request: %s\n", reqline, host, *port, new_request);
-    printf("---------Out parse_reqline--------\n");
     return 1;
 }
 
 int parse_uri(char *uri, char *host, int *port, char *uri_nohost) {
     char *uri_ptr, *first_slash_ptr;
     char host_str[MAXLINE], port_str[MAXLINE];
-    printf("---------In parse_uri--------\n");
     *host = 0;
     *port = 80;
 
@@ -317,7 +285,6 @@ int parse_uri(char *uri, char *host, int *port, char *uri_nohost) {
 
     if (uri_ptr == NULL) {
         strcpy(uri_nohost, uri);
-        printf("---------Out parse_uri--------\n");
         return 0;
     } else {
         uri_ptr += 7;
@@ -339,15 +306,12 @@ int parse_uri(char *uri, char *host, int *port, char *uri_nohost) {
         }
 
         strcpy(host, host_str);
-        printf("uri: %s, host: %s, port: %d, uri_nohost: %s\n", uri, host, *port, uri_nohost);
-        printf("---------Out parse_uri--------\n");
         return 1;
     }
 }
 
 void get_key_value(char *header_line, char *key, char *value) {
     char *key_tail, *value_tail;
-    printf("---------In get_key_value--------\n");
 
     /* Split the given header line by ":" */
     key_tail = strstr(header_line, ":");
@@ -355,24 +319,19 @@ void get_key_value(char *header_line, char *key, char *value) {
         /* Get the key part */
         *key_tail = 0;
         strcpy(key, header_line);
-        printf("key: %s\n", key);
         *key_tail = ':';
 
         /* Find the "\r\n" and get the value accordingly */
-        value_tail = strstr(header_line, "\r");         // !!!!!!! what should be used here !!!!!
-        printf("I've find the pointer: %p\n", (void *)value_tail);
+        value_tail = strstr(header_line, "\r");
         *value_tail = 0; 
         strcpy(value, key_tail + 2);
         *value_tail = '\r'; 
-        printf("value: %s\n", value);
     } 
-    printf("---------Out get_key_value--------\n");
     return;
 }
 
 void get_host_port(char *value, char *host, int *port) {
     char *host_tail;
-    printf("---------In get_host_port--------\n");
     *port = 80;
 
     host_tail = strstr(value, ":");
@@ -382,7 +341,6 @@ void get_host_port(char *value, char *host, int *port) {
         *port = atoi(host_tail + 1);
         *host_tail = ':';
     }
-    printf("---------Out get_host_port--------\n");
     return;
 }
 
@@ -403,7 +361,6 @@ int iRio_writen(int fd, void *usrbuf, size_t n) {
             return -1;
         } 
         else
-            // unix_error("Rio_writen error");
             return -1;
     }
 

@@ -1,5 +1,6 @@
 proxy-ref.c
 proxy-stage1.c
 proxy-stage2.c
+proxy-stage3.c
 *.o
 proxy
