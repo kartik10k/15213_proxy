@@ -13,24 +13,26 @@ static const char *connection_hdr = "Connection: close\r\n";
 static const char *proxy_connection_hdr = "Proxy-Connection: close\r\n";
 static const char *default_http_version = "HTTP/1.0\r\n";
 
-static sem_t mutex;
-pthread_rwlock_t rwlock;
 static cache_list *cache_inst;
 
 void doit(int fd);
-int generate_request(rio_t *rp, char *i_request, char *i_host, char * i_uri, int *i_port);
-int parse_reqline(char *new_request, char *reqline, char *host, char *uri, int *port);
+int generate_request(rio_t *rp, char *i_request, char *i_host, 
+        char *i_uri, int *i_port);
+int parse_reqline(char *new_request, char *reqline, 
+        char *host, char *uri, int *port);
 int parse_uri(char *uri, char *host, int *port, char *uri_nohost);
 void get_key_value(char *header_line, char *key, char *value);
 void get_host_port(char *value, char *host, int *port);
-void *thread(void* vargp);
+void *thread(void *vargp);
 
 /* Customized response func */
-void client_error(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+void client_error(int fd, char *cause, char *errnum, 
+        char *shortmsg, char *longmsg);
 
 /* Customized r/w func and error handler wrapper */
 int iOpen_clientfd_r(int fd, char *hostname, int port);
-ssize_t iRio_readnb(int fd, char *hostname, rio_t *rp, void *usrbuf, size_t n);
+ssize_t iRio_readnb(int fd, char *hostname, rio_t *rp, 
+        void *usrbuf, size_t n);
 int iRio_writen(int fd, void *usrbuf, size_t n);
 void iClose(int fd);
 
@@ -41,13 +43,11 @@ int main(int argc, char **argv) {
     struct sockaddr_in clientaddr;
     pthread_t tid;
 
-    Sem_init(&mutex, 0, 1);
-    pthread_rwlock_init(&rwlock, NULL);
-
+    /* Cache list initiation */
     cache_inst = (cache_list *)Malloc(sizeof(cache_list));
     init_cache_list(cache_inst);
 
-    /* Check command line args number. */
+    /* Check command line args number */
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
         exit(1);
@@ -63,7 +63,8 @@ int main(int argc, char **argv) {
     while (1) {
         clientlen = sizeof(clientaddr);
         connfdp = (int *)Malloc(sizeof(int));
-        *connfdp = Accept(listenfd, (SA *)&clientaddr, (socklen_t *)&clientlen);
+        *connfdp = Accept(listenfd, (SA *)&clientaddr, 
+                    (socklen_t *)&clientlen);
         Pthread_create(&tid, NULL, thread, connfdp);
     }
     
@@ -78,7 +79,7 @@ void doit(int fd) {
     char* content_copy = NULL;
     int content_size = 0;
 
-    char* uri = (char*)Malloc(MAXLINE * sizeof(char));
+    char *uri = (char *)Malloc(MAXLINE * sizeof(char));
     char *request = (char *)Malloc(MAXLINE * sizeof(char));
     char *host = (char *)Malloc(MAXLINE * sizeof(char));
     int port;
@@ -136,7 +137,8 @@ void doit(int fd) {
     char buf[MAX_OBJECT_SIZE];
     char content[MAX_OBJECT_SIZE];
 
-    while ((nread = iRio_readnb(fd, host, &server_rio, buf, MAX_OBJECT_SIZE)) != 0) {
+    while ((nread = iRio_readnb(fd, host, &server_rio, 
+                buf, MAX_OBJECT_SIZE)) != 0) {
         if(nread < 0) {
             Free(request);
             Free(host);
@@ -171,14 +173,15 @@ void doit(int fd) {
     return;
 }
 
-int generate_request(rio_t *rp, char *i_request, char *i_host, char* i_uri, int *i_port) {
+int generate_request(rio_t *rp, char *i_request, char *i_host, 
+            char *i_uri, int *i_port) {
     char buf[MAXLINE]; 
     char key[MAXLINE];
     char value[MAXLINE];
     char raw[MAXLINE]; 
     int port = 80;
     int host_in_reqbody = 0; 
-    char* request = i_request;             // check the weird pointer/array assignment here!!!!
+    char* request = i_request;
     char* host = i_host;
     char* uri = i_uri;
 
@@ -260,7 +263,8 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, char* i_uri, int 
     return 1;
 }
 
-int parse_reqline(char *new_request, char *reqline, char *host, char* uri, int *port) {
+int parse_reqline(char *new_request, char *reqline, char *host, 
+            char *uri, int *port) {
     char method[MAXLINE], version[MAXLINE];
     char uri_nohost[MAXLINE];
     char new_req[MAXLINE];
@@ -270,7 +274,7 @@ int parse_reqline(char *new_request, char *reqline, char *host, char* uri, int *
         return 0;
     parse_uri(uri, host, port, uri_nohost);
 
-    sprintf(new_req, "%s %s %s", method, uri_nohost, default_http_version);   // !!!!! if not GET
+    sprintf(new_req, "%s %s %s", method, uri_nohost, default_http_version);
     strcat(new_request, new_req);
     return 1;
 }
@@ -377,7 +381,8 @@ int iOpen_clientfd_r(int fd, char *hostname, int port) {
     return rc;
 }
 
-ssize_t iRio_readnb(int fd, char *hostname, rio_t *rp, void *usrbuf, size_t n) {
+ssize_t iRio_readnb(int fd, char *hostname, rio_t *rp, 
+            void *usrbuf, size_t n) {
     ssize_t rc;
 
     if ((rc = rio_readnb(rp, usrbuf, n)) < 0)
@@ -392,7 +397,8 @@ void iClose(int fd){
         printf("fd close error\n");
 }
 
-void client_error(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
+void client_error(int fd, char *cause, char *errnum, 
+            char *shortmsg, char *longmsg) {
     char buf[MAXLINE], body[MAXLINE];
 
     /* Build the HTTP response body */
