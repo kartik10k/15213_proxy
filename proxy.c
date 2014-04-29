@@ -104,8 +104,8 @@ void doit(int fd) {
     printf("request: %s, host: %s, uri: %s. port: %d\n", request, host, uri, port);
 
     //first: read in cache
-    content_copy = read_cache(cache_inst, uri, &content_size);
-    if (content_size > 0){ //cache hit
+    content_copy = read_cache(cache_inst, request, &content_size);
+   if (content_size > 0){ //cache hit
         if (content_copy == NULL){
             printf("content in cache error\n");
             return;
@@ -143,10 +143,10 @@ void doit(int fd) {
 
     /*Forward response from the server to the client through connfd*/
     ssize_t nread;
-    char buf[MAXLINE];
+    char buf[MAX_OBJECT_SIZE];
     char content[MAX_OBJECT_SIZE];
 
-    while ((nread = iRio_readnb(fd, host, &server_rio, buf, MAXLINE)) != 0) {
+    while ((nread = iRio_readnb(fd, host, &server_rio, buf, MAX_OBJECT_SIZE)) != 0) {
         if(nread < 0) {
             Free(request);
             Free(host);
@@ -161,19 +161,23 @@ void doit(int fd) {
             printf("web content object is too lage!\n");
             fit_size = 0;
         }
-        
+        printf("buf content: %s\n", buf);
         iRio_writen(fd, buf, nread);
     }
 
     iClose(server_fd);
 
     if (fit_size == 1){
-        // if (strstr(uri, "?") != NULL){
-        //     printf("do not cache this web content uri:%s\n", uri);
-        // }else{
+      //  if (strstr(uri, "?") != NULL){
+      //      printf("do not cache this web content uri:%s\n", uri);
+   //     }else 
+        if (strstr(content, "no-cache") != NULL){
+            printf("cache control is no cache, do not cache\n");
+        }else{
             printf("cache the web content object uri: %s\n", uri);
-            modify_cache(cache_inst, uri, content, total);
-        // }
+            printf("content: %s\n", content);
+            modify_cache(cache_inst, request, content, total);
+        }
     } 
  
     printf("---------Out doit--------\r\n");
@@ -225,6 +229,7 @@ int generate_request(rio_t *rp, char *i_request, char *i_host, char* i_uri, int 
     
     while (strcmp(buf, "\r\n")) {                     // !!!!!!!! \r\n VS \n !!!!!!!!!!!
         printf("cmp result: %d\n", strcmp(buf, "\r\n"));
+        printf("cmp is '\n?' %d \n", strcmp(buf,"\n"));
         *key = '\0';
         *value = '\0';
         if (rio_readlineb(rp, buf, MAXLINE) < 0){
@@ -383,8 +388,8 @@ void get_host_port(char *value, char *host, int *port) {
 
 void *thread(void* vargp) {
     int connfd = *((int *)vargp);
-    Pthread_detach(Pthread_self());
     Free(vargp);
+    Pthread_detach(Pthread_self());
     doit(connfd);
     iClose(connfd);
     return NULL;

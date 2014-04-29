@@ -37,13 +37,13 @@ static cache_block *new_cache(char *url, char *content,
 	cache_block *cb;
 	cb = (cache_block *)Malloc(sizeof(cache_block));
 	if (url != NULL){
-		cb->id = (char *) Malloc(sizeof(char) * (strlen(url) + 100));
+		cb->id = (char *) Malloc(sizeof(char) * (strlen(url) + 1));
 		strcpy(cb->id, url);
 	}
 	cb->block_size = block_size;
 
 	if (content != NULL){
-		cb->content = (char *) Malloc(sizeof(char) * (strlen(content) + 100));
+		cb->content = (char *) Malloc(sizeof(char) * (block_size + 1));
 		strcpy(cb->content, content);
 	}
 
@@ -128,6 +128,7 @@ char* read_cache(cache_list *cl, char *url, int* size){
 		content_copy = (char*) Malloc(sizeof(char) * cache->block_size);
 
 		memcpy(content_copy, cache->content, sizeof(char) * cache->block_size);
+		printf("%s\n", cache->content);
 //		pthread_mutex_unlock(&cache_lock);
 		V(&sem);
         return content_copy;
